@@ -20,10 +20,8 @@ import androidx.compose.foundation.gestures.Orientation
 import androidx.compose.foundation.gestures.draggable
 import androidx.compose.foundation.gestures.rememberDraggableState
 import androidx.compose.foundation.isSystemInDarkTheme
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
@@ -56,6 +54,7 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -65,8 +64,10 @@ import io.github.magikdidi24.budspopup.protocol.BudsStatus
 import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
 
-// Horizontal centre of the left bud, the case and the right bud in the 3D view (tools/build_model.py prints them).
-private val GAUGE_X = floatArrayOf(0.249f, 0.5f, 0.751f)
+// Where the left bud, the right bud and the slid-aside case stand in the 3D view (tools/build_model.py prints them).
+private const val LEFT_X = 0.240f
+private const val RIGHT_X = 0.351f
+private const val CASE_SIDE_X = 0.699f
 private val GREEN = Color(0xFF34C759)
 private val ORANGE = Color(0xFFFF9500)
 private val RED = Color(0xFFFF3B30)
@@ -119,9 +120,10 @@ fun PopupCard(
                     title,
                     Modifier.align(Alignment.Center).padding(horizontal = 40.dp),
                     color = foreground,
-                    fontSize = 18.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    maxLines = 1,
+                    fontSize = 20.sp,
+                    fontWeight = FontWeight.Bold,
+                    textAlign = TextAlign.Center,
+                    maxLines = 2,
                 )
                 CloseButton(foreground, onDismiss, Modifier.align(Alignment.CenterEnd))
             }
@@ -154,22 +156,27 @@ private fun CloseButton(foreground: Color, onClick: () -> Unit, modifier: Modifi
 
 @Composable
 private fun BatteryRow(status: BudsStatus?, foreground: Color) {
+    val leftOut = status?.placementLeft?.isOut == true
+    val rightOut = status?.placementRight?.isOut == true
+    // The case's ring follows the case, which slides right once a bud is out (BudsScene).
+    val caseX by animateFloatAsState(if (leftOut || rightOut) CASE_SIDE_X else 0.5f, tween(800, delayMillis = 400), label = "case")
     Layout(
         content = {
-            // A bud's level shows only once it is out, as it lands beside the case; the case's always shows.
-            BudGauge(status?.placementLeft?.isOut == true) {
+            // A bud's level shows only once it is out, as it lands in the pair; the case's always shows.
+            BudGauge(leftOut) {
                 BatteryGauge(status?.left, status?.leftCharging == true, stringResource(R.string.left), foreground)
             }
-            BatteryGauge(status?.case, status?.caseCharging == true, stringResource(R.string.case_label), foreground)
-            BudGauge(status?.placementRight?.isOut == true) {
+            BudGauge(rightOut) {
                 BatteryGauge(status?.right, status?.rightCharging == true, stringResource(R.string.right), foreground)
             }
+            BatteryGauge(status?.case, status?.caseCharging == true, null, foreground)
         },
         modifier = Modifier.fillMaxWidth(),
     ) { measurables, constraints ->
         val placeables = measurables.map { it.measure(constraints.copy(minWidth = 0)) }
+        val xs = floatArrayOf(LEFT_X, RIGHT_X, caseX)
         layout(constraints.maxWidth, placeables.maxOf { it.height }) {
-            placeables.forEachIndexed { i, p -> p.place((GAUGE_X[i] * constraints.maxWidth - p.width / 2f).roundToInt(), 0) }
+            placeables.forEachIndexed { i, p -> p.place((xs[i] * constraints.maxWidth - p.width / 2f).roundToInt(), 0) }
         }
     }
 }
@@ -185,14 +192,15 @@ private fun BudGauge(out: Boolean, content: @Composable () -> Unit) {
     }
 }
 
+/** A thin ring as on the iPhone: the bolt inside while charging, else the bud's letter; the level below. */
 @Composable
-private fun BatteryGauge(level: Int?, charging: Boolean, label: String, foreground: Color) {
+private fun BatteryGauge(level: Int?, charging: Boolean, label: String?, foreground: Color) {
     val progress by animateFloatAsState((level ?: 0) / 100f, tween(900), label = "battery")
     val ring = level?.let(::levelColor) ?: foreground.copy(alpha = 0.12f)
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        Box(Modifier.size(54.dp), contentAlignment = Alignment.Center) {
+        Box(Modifier.size(32.dp), contentAlignment = Alignment.Center) {
             Canvas(Modifier.fillMaxSize()) {
-                val stroke = 5.dp.toPx()
+                val stroke = 3.dp.toPx()
                 val topLeft = Offset(stroke / 2, stroke / 2)
                 val arcSize = Size(size.width - stroke, size.height - stroke)
                 // An empty battery still gets a visible red circle.
@@ -202,13 +210,13 @@ private fun BatteryGauge(level: Int?, charging: Boolean, label: String, foregrou
                     drawArc(ring, -90f, 360f * progress, false, topLeft, arcSize, style = Stroke(stroke, cap = StrokeCap.Round))
                 }
             }
-            Text(level?.let { "$it %" } ?: "–", color = foreground, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+            when {
+                charging -> Bolt(ring)
+                label != null -> Text(label, color = foreground.copy(alpha = 0.6f), fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+            }
         }
-        Spacer(Modifier.height(6.dp))
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(3.dp)) {
-            if (charging) Bolt(ring)
-            Text(label, color = foreground.copy(alpha = 0.6f), fontSize = 12.sp)
-        }
+        Spacer(Modifier.height(5.dp))
+        Text(level?.let { "$it %" } ?: "–", color = foreground.copy(alpha = 0.85f), fontSize = 12.sp)
     }
 }
 

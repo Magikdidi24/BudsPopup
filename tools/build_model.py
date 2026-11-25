@@ -18,10 +18,12 @@ import bpy
 from mathutils import Euler, Vector
 
 FPS = 30
-OPEN_END = 66     # frame where the open sequence stops (2.2 s)
-IDLE_START = 70   # idle loop runs from here...
-IDLE_END = 250    # ...to here (6 s), then the app wraps back to IDLE_START
-BUD_X = 4.3       # where a bud out of the case floats, for the preview (BudsScene.kt moves the buds)
+OPEN_END = 30     # frame where the case has popped in and the lid is open (1 s)
+# iPhone-like layout, mirrored in BudsScene.kt: once a bud is out the case slides right and the
+# buds stand as a pair on the left. Used here only to print where they land on screen.
+CASE_X = 3.4
+PAIR_X = -3.5
+PAIR_GAP = 0.95   # each bud's distance from the pair's centre
 BUD_Z = -0.2
 LID_OPEN = -100.0  # degrees around X; negative lifts the front edge
 
@@ -121,29 +123,19 @@ def prepare(src):
 
 
 def animate(root, lid):
-    """Case pop-in, lid opening, then the idle sway. The buds have no keys: the app moves each
-    one out of or back into the case when that bud leaves or returns (BudsScene.kt)."""
-    for o in (root, lid):
-        o.rotation_mode = 'XYZ'
-    for f in range(0, IDLE_END + 1):
-        if f <= OPEN_END:
-            s = lerp(0.82, 1.0, ease_out_back(phase(f, 0, 14)))
-            root.scale = (s, s, s)
-            root.rotation_euler = (0, 0, math.radians(lerp(-18, 0, ease(phase(f, 0, 40)))))
-            # The lid opens as soon as the card is up (the 3D starts ~0.35 s after the card), quick but seen.
-            lid.rotation_euler = (math.radians(LID_OPEN * ease_out_back(phase(f, 9, 26), 1.1)), 0, 0)
-        else:
-            t = (max(f, IDLE_START) - IDLE_START) / (IDLE_END - IDLE_START)
-            root.scale = (1, 1, 1)
-            root.rotation_euler = (0, 0, math.radians(12 * math.sin(2 * math.pi * t)))
-            lid.rotation_euler = (math.radians(LID_OPEN), 0, 0)
-        for o in (root, lid):
-            o.keyframe_insert('location', frame=f)
-            o.keyframe_insert('rotation_euler', frame=f)
-            o.keyframe_insert('scale', frame=f)
+    """Case pop-in and lid opening. The app turns the case, slides it aside and moves each bud
+    out of or back into the case when that bud leaves or returns (BudsScene.kt)."""
+    lid.rotation_mode = 'XYZ'
+    for f in range(0, OPEN_END + 1):
+        s = lerp(0.82, 1.0, ease_out_back(phase(f, 0, 14)))
+        root.scale = (s, s, s)
+        # The lid opens as soon as the card is up (the 3D starts ~0.35 s after the card), quick but seen.
+        lid.rotation_euler = (math.radians(LID_OPEN * ease_out_back(phase(f, 9, 26), 1.1)), 0, 0)
+        root.keyframe_insert('scale', frame=f)
+        lid.keyframe_insert('rotation_euler', frame=f)
     sc = bpy.context.scene
     sc.render.fps = FPS
-    sc.frame_start, sc.frame_end = 0, IDLE_END
+    sc.frame_start, sc.frame_end = 0, OPEN_END
 
 
 def export(dst):
@@ -173,12 +165,13 @@ def preview(out, hdr):
     cam.location = CAM_EYE
     cam.rotation_euler = (Vector(CAM_TARGET) - Vector(CAM_EYE)).to_track_quat('-Z', 'Y').to_euler()
     from bpy_extras.object_utils import world_to_camera_view
-    for f in (0, 12, 20, 30, 66, 160):
+    for f in (0, 12, 20, 30):
         sc.frame_set(f)
         sc.render.filepath = f'{out}/f{f:03d}.png'
         bpy.ops.render.render(write_still=True)
-    for name, side in (('BudL', -1), ('BudR', 1)):  # where each bud lands, for the battery row under it
-        p = world_to_camera_view(sc, cam, Vector((side * BUD_X, 0, BUD_Z)))
+    spots = {'BudL': (PAIR_X - PAIR_GAP, 0, BUD_Z), 'BudR': (PAIR_X + PAIR_GAP, 0, BUD_Z), 'case': (CASE_X, 0, 0)}
+    for name, spot in spots.items():  # where each one lands, for the battery ring under it
+        p = world_to_camera_view(sc, cam, Vector(spot))
         print(f'SCREEN {name} x={p.x:.3f} y={1 - p.y:.3f}')
     p = world_to_camera_view(sc, cam, Vector((0, 0, -1.415)))
     print(f'SCREEN case-bottom y={1 - p.y:.3f}')

@@ -19,29 +19,27 @@ import io.github.magikdidi24.budspopup.protocol.BudsColor
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import kotlin.math.PI
-import kotlin.math.atan2
 import kotlin.math.cos
 import kotlin.math.hypot
 import kotlin.math.min
 import kotlin.math.sin
 
 // Keep in sync with tools/build_model.py (frames at 30 fps, Blender coords turned Y-up: (x, z, -y)).
-private const val OPEN_END = 66f / 30
-private const val IDLE_START = 70f / 30
-private const val IDLE_LENGTH = 180f / 30
+private const val OPEN_END = 30f / 30 // the baked part: case pop-in and lid opening
 private val EYE = doubleArrayOf(0.0, 7.5, 21.0)
 private val TARGET = doubleArrayOf(0.0, 1.3, 0.0)
 private const val FOCAL_LENGTH = 50f
 const val SCENE_ASPECT = 640f / 400f
 private const val LID_OPEN = 0.9f  // s: frame 26, buds wait for the lid before moving
-private const val BUD_X = 4.3f     // spot beside the case, Blender (±4.3, 0, -0.2)
+// iPhone layout: with a bud out, the case slides right and the buds stand as a pair on the left.
+private const val CASE_X = 3.4f
+private const val PAIR_X = -3.5f
+private const val PAIR_GAP = 0.95f // each bud's distance from the pair's centre
 private const val BUD_Y = -0.2f
 private const val LIFT = 3.4f      // how high a bud rises out of its slot before moving aside
-private const val TURN = 20f       // degrees each bud turns outwards once beside the case
-
-/** Open sequence once, then the idle loop forever. */
-fun animationTime(seconds: Float) =
-    if (seconds < OPEN_END) seconds else IDLE_START + (seconds - OPEN_END) % IDLE_LENGTH
+private const val TURN = 20f       // degrees each bud of the pair turns outwards
+private const val TURN_PERIOD = 7f // s per turn of the turntable, as on the iPhone
+private const val TURN_RAMP = 1f   // s to reach that speed once the lid is open
 
 /** Base colours of the black buds; the asset itself is the white model. */
 private val BLACK = mapOf(
@@ -121,13 +119,12 @@ private class BudsRenderer(textureView: TextureView, color: BudsColor) : Choreog
             val dt = if (lastNanos == 0L) 0f else min((frameTimeNanos - lastNanos) / 1e9f, 1f / 30)
             lastNanos = frameTimeNanos
             seconds += dt
-            val t = animationTime(seconds)
             // Blender exports one animation per object (case, lid), all on the same timeline.
-            for (i in 0 until animator.animationCount) animator.applyAnimation(i, t)
+            for (i in 0 until animator.animationCount) animator.applyAnimation(i, min(seconds, OPEN_END))
             animator.updateBoneMatrices()
             val buds = buds ?: findBuds().also { buds = it }
             if (seconds > LID_OPEN) buds.forEach { it.motion.step(dt) }
-            placeBuds(buds)
+            placeScene(buds)
         }
         viewer.render(frameTimeNanos)
     }
@@ -143,27 +140,44 @@ private class BudsRenderer(textureView: TextureView, color: BudsColor) : Choreog
         }
     }
 
-    /** Each bud between its slot, which follows the case's sway, and its spot beside the case. */
-    private fun placeBuds(buds: List<Bud>) {
+    /**
+     * The case and the pair of buds turn together like on a turntable. The case slides right as soon
+     * as a bud leaves it, and each bud goes between its slot and its place in the pair on the left.
+     */
+    private fun placeScene(buds: List<Bud>) {
         val tm = viewer.engine.transformManager
-        tm.getTransform(tm.getInstance(viewer.asset!!.getFirstEntityByName("CaseRoot")), matrix)
-        val caseYaw = atan2(-matrix[2], matrix[0]) // the case only turns around the vertical axis
-        val caseScale = hypot(matrix[0], matrix[2])
+        val case = tm.getInstance(viewer.asset!!.getFirstEntityByName("CaseRoot"))
+        tm.getTransform(case, matrix)
+        val scale = hypot(matrix[0], matrix[2]) // the baked pop-in
+        val yaw = turn(seconds)
+        val (c, s) = cos(yaw) to sin(yaw)
+        val caseX = CASE_X * buds.maxOf { it.motion.away }
+        pose(caseX, 0f, 0f, yaw, 0f, scale)
+        tm.setTransform(case, matrix)
         for (bud in buds) {
             val m = bud.motion
             val (rx, ry, rz) = bud.rest
             val away = m.away
-            val bob = 0.12f * sin(2 * PI.toFloat() * seconds / 3) * away
-            val spot = bud.side * BUD_X
             pose(
-                x = lerp(caseScale * (cos(caseYaw) * rx + sin(caseYaw) * rz), spot, away),
-                y = lerp(caseScale * ry + LIFT * m.rise, BUD_Y + bob, away),
-                z = lerp(caseScale * (cos(caseYaw) * rz - sin(caseYaw) * rx), 0f, away),
-                yaw = lerp(caseYaw, Math.toRadians((bud.side * (m.spin - TURN)).toDouble()).toFloat(), away),
+                x = lerp(caseX + scale * (c * rx + s * rz), PAIR_X + c * bud.side * PAIR_GAP, away),
+                y = lerp(scale * ry + LIFT * m.rise, BUD_Y, away),
+                z = lerp(scale * (c * rz - s * rx), -s * bud.side * PAIR_GAP, away),
+                yaw = yaw - Math.toRadians((bud.side * TURN).toDouble()).toFloat() * away,
                 pitch = PI.toFloat() / 2 * away, // lying in the slot, standing once out
-                scale = lerp(caseScale, 1f, away),
+                scale = lerp(scale, 1f, away),
             )
             tm.setTransform(tm.getInstance(bud.entity), matrix)
+        }
+    }
+
+    /** Turntable angle: still while the lid opens, then up to one turn every [TURN_PERIOD]. */
+    private fun turn(t: Float): Float {
+        val speed = 2 * PI.toFloat() / TURN_PERIOD
+        val d = t - LID_OPEN
+        return when {
+            d <= 0f -> 0f
+            d < TURN_RAMP -> speed * d * d / (2 * TURN_RAMP)
+            else -> speed * (d - TURN_RAMP / 2)
         }
     }
 

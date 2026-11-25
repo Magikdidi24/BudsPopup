@@ -1,6 +1,6 @@
 # Buds Popup
 
-An AirPods-style battery card for the Galaxy Buds4 Pro on Android. Open the case and a card slides up from the bottom of the screen with a 3D case that opens its lid and the case's battery level. Take a bud out and it rises from the case, settles on its side and spins, with its own battery level under it. Put it back and it flies back into its slot. Each bud moves on its own.
+An AirPods-style battery card for the Galaxy Buds4 Pro on Android, laid out like the iPhone one. Open the case and a card slides up from the bottom of the screen with a 3D case that opens its lid, turning slowly like on a turntable, with the case's battery level. Take a bud out and it rises from the case and joins the pair on the left while the case slides right, with its own battery level under it. Put it back and it flies back into its slot. Each bud moves on its own.
 
 Personal project, not on the Play Store.
 

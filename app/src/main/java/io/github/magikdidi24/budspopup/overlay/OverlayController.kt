@@ -80,7 +80,7 @@ class OverlayController(private val context: Context) {
         PixelFormat.TRANSLUCENT,
     ).apply {
         gravity = Gravity.BOTTOM
-        dimAmount = 0.25f
+        dimAmount = 0.4f
         fitInsetsTypes = 0 // reach the screen edge so the card slides in from the very bottom
         title = "BudsPopup"
     }

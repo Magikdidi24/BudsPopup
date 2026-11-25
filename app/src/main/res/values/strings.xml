@@ -3,8 +3,7 @@
     <string name="app_name">Buds Popup</string>
     <string name="notification_channel">Popup des écouteurs</string>
     <string name="notification_text">Lecture de la batterie des écouteurs</string>
-    <string name="left">Gauche</string>
-    <string name="right">Droite</string>
-    <string name="case_label">Boîtier</string>
+    <string name="left">G</string>
+    <string name="right">D</string>
     <string name="close">Fermer</string>
 </resources>
