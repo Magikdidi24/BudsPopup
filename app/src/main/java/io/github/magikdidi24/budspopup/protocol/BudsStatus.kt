@@ -4,6 +4,8 @@ enum class Placement {
     Disconnected, Wearing, Idle, InCase, InClosedCase, Unknown;
 
     val inCase get() = this == InCase || this == InClosedCase
+    /** Taken out of the case: in an ear or just in the hand. */
+    val isOut get() = this == Wearing || this == Idle
 
     companion object {
         fun of(code: Int) = entries.getOrNull(code)?.takeIf { it != Unknown } ?: Unknown
@@ -15,7 +17,7 @@ enum class BudsColor { White, Black }
 data class BudsStatus(
     val left: Int,
     val right: Int,
-    /** Only reported while the case charges or holds a bud. */
+    /** 0 is a real, empty case; null only when the byte is not a percentage. */
     val case: Int?,
     val placementLeft: Placement,
     val placementRight: Placement,
@@ -26,5 +28,4 @@ data class BudsStatus(
     val color: BudsColor? = null,
 ) {
     val anyInCase get() = placementLeft.inCase || placementRight.inCase
-    val anyWorn get() = placementLeft == Placement.Wearing || placementRight == Placement.Wearing
 }

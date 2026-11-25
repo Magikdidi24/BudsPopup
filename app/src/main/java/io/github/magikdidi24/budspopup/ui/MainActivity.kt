@@ -51,12 +51,18 @@ import io.github.magikdidi24.budspopup.overlay.OverlayController
 import io.github.magikdidi24.budspopup.protocol.BudsColor
 import io.github.magikdidi24.budspopup.protocol.BudsStatus
 import io.github.magikdidi24.budspopup.protocol.Placement
+import androidx.lifecycle.lifecycleScope
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
     private val prefs by lazy { Prefs(this) }
     private val refresh = mutableIntStateOf(0) // bumped on resume: permissions may have changed in Settings
     private var testOverlay: OverlayController? = null
+    private var testScript: Job? = null
 
     private val permissions = registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { refresh.intValue++ }
     private val association = registerForActivityResult(ActivityResultContracts.StartIntentSenderForResult()) {
@@ -165,11 +171,19 @@ class MainActivity : ComponentActivity() {
             return
         }
         testOverlay?.remove()
+        testScript?.cancel()
         val status = MutableStateFlow<BudsStatus?>(
-            BudsStatus(82, 76, 64, Placement.InCase, Placement.InCase, caseCharging = true, color = color),
+            BudsStatus(82, 35, 0, Placement.InCase, Placement.InCase, leftCharging = true, rightCharging = true, color = color),
         )
         testOverlay = OverlayController(applicationContext).also { overlay ->
             overlay.show("Galaxy Buds4 Pro", status, color) { overlay.hide {} }
+        }
+        // Take each bud out and put it back at its own time, like a real case.
+        testScript = lifecycleScope.launch {
+            delay(2500); status.update { it?.copy(placementLeft = Placement.Idle, leftCharging = false) }
+            delay(2000); status.update { it?.copy(placementRight = Placement.Idle, rightCharging = false) }
+            delay(3000); status.update { it?.copy(placementLeft = Placement.InCase, leftCharging = true) }
+            delay(2000); status.update { it?.copy(placementRight = Placement.InCase, rightCharging = true) }
         }
     }
 }

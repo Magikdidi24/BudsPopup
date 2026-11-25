@@ -22,19 +22,19 @@ class StatusParserTest {
         val s = StatusParser.parse(frame)!!
         assertEquals(70, s.left)
         assertEquals(89, s.right)
-        assertNull(s.case)
+        assertEquals(0, s.case)
         assertEquals(Placement.Wearing, s.placementLeft)
         assertEquals(Placement.Wearing, s.placementRight)
         assertEquals(BudsColor.Black, s.color)
         assertFalse(s.anyInCase)
-        assertTrue(s.anyWorn)
+        assertTrue(s.placementLeft.isOut)
     }
 
     @Test
     fun `extended status from my Buds4 Pro, case just opened`() {
-        // Captured on the S25+ on 2026-11-25: both buds in the open case, case level not reported.
+        // Captured on the S25+ on 2026-11-25: both buds in the open case, the case itself empty.
         val s = StatusParser.parse(single(fixture("buds4pro_extended_status_in_case_real")))!!
-        assertEquals(BudsStatus(66, 68, null, Placement.InCase, Placement.InCase, color = BudsColor.Black), s)
+        assertEquals(BudsStatus(66, 68, 0, Placement.InCase, Placement.InCase, color = BudsColor.Black), s)
         assertTrue(s.anyInCase)
     }
 

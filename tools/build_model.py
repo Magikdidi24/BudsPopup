@@ -5,7 +5,8 @@
 
 Source: "SUMSUNG Buds 4 Pro" by zhe_kan (sketchfab.com/zhe_kan), CC BY-NC-SA 4.0.
 Changes: logo removed, earbuds split into BudL / BudR, lid pivot moved to the hinge,
-materials renamed, one baked animation (open sequence, then an idle loop).
+materials renamed, case and lid animation baked (open sequence, then an idle loop).
+The buds are not animated here: the app moves each one when it leaves or returns to the case.
 
 Blender is Z-up in cm; glTF is Y-up, so a Blender point (x, y, z) is (x, z, -y) in the app.
 The front of the case faces -Y.
@@ -20,7 +21,7 @@ FPS = 30
 OPEN_END = 66     # frame where the open sequence stops (2.2 s)
 IDLE_START = 70   # idle loop runs from here...
 IDLE_END = 250    # ...to here (6 s), then the app wraps back to IDLE_START
-BUD_X = 4.3       # final distance of each bud from the case centre (cm)
+BUD_X = 4.3       # where a bud out of the case floats, for the preview (BudsScene.kt moves the buds)
 BUD_Z = -0.2
 LID_OPEN = -100.0  # degrees around X; negative lifts the front edge
 
@@ -118,9 +119,10 @@ def prepare(src):
     return root, lid, objs['BudL'], objs['BudR']
 
 
-def animate(root, lid, buds):
-    rest = {b: b.location.copy() for b in buds}
-    for o in (root, lid, *buds):
+def animate(root, lid):
+    """Case pop-in, lid opening, then the idle sway. The buds have no keys: the app moves each
+    one out of or back into the case when that bud leaves or returns (BudsScene.kt)."""
+    for o in (root, lid):
         o.rotation_mode = 'XYZ'
     for f in range(0, IDLE_END + 1):
         if f <= OPEN_END:
@@ -128,24 +130,12 @@ def animate(root, lid, buds):
             root.scale = (s, s, s)
             root.rotation_euler = (0, 0, math.radians(lerp(-18, 0, ease(phase(f, 0, 40)))))
             lid.rotation_euler = (math.radians(LID_OPEN * ease_out_back(phase(f, 10, 30), 1.1)), 0, 0)
-            for b in buds:
-                side = -1 if b.name == 'BudL' else 1
-                rise, out = ease(phase(f, 24, 40)), ease(phase(f, 36, 60))
-                p0 = rest[b]
-                b.location = (lerp(p0.x, side * BUD_X, out),
-                              lerp(p0.y, 0.0, out),
-                              lerp(p0.z + 3.4 * rise, BUD_Z, out))
-                b.rotation_euler = (math.radians(90 * out), 0, math.radians(-side * 20 * out))
         else:
             t = (max(f, IDLE_START) - IDLE_START) / (IDLE_END - IDLE_START)
             root.scale = (1, 1, 1)
             root.rotation_euler = (0, 0, math.radians(12 * math.sin(2 * math.pi * t)))
             lid.rotation_euler = (math.radians(LID_OPEN), 0, 0)
-            for b in buds:
-                side = -1 if b.name == 'BudL' else 1
-                b.location = (side * BUD_X, 0.0, BUD_Z + 0.12 * math.sin(4 * math.pi * t))
-                b.rotation_euler = (math.radians(90), 0, math.radians(-side * 20 + side * 360 * t))
-        for o in (root, lid, *buds):
+        for o in (root, lid):
             o.keyframe_insert('location', frame=f)
             o.keyframe_insert('rotation_euler', frame=f)
             o.keyframe_insert('scale', frame=f)
@@ -161,7 +151,7 @@ def export(dst):
         export_lights=False, export_extras=False, export_yup=True)
 
 
-def preview(out, hdr, buds):
+def preview(out, hdr):
     sc = bpy.context.scene
     sc.render.engine = 'BLENDER_EEVEE'
     sc.render.film_transparent = True
@@ -181,26 +171,25 @@ def preview(out, hdr, buds):
     cam.location = CAM_EYE
     cam.rotation_euler = (Vector(CAM_TARGET) - Vector(CAM_EYE)).to_track_quat('-Z', 'Y').to_euler()
     from bpy_extras.object_utils import world_to_camera_view
-    for f in (0, 12, 20, 30, 38, 48, 60, 66, 115, 160, 205):
+    for f in (0, 12, 20, 30, 66, 160):
         sc.frame_set(f)
         sc.render.filepath = f'{out}/f{f:03d}.png'
         bpy.ops.render.render(write_still=True)
-    sc.frame_set(IDLE_START)
-    for b in buds:  # where each bud lands on screen, for the battery row under it
-        p = world_to_camera_view(sc, cam, b.matrix_world.translation)
-        print(f'SCREEN {b.name} x={p.x:.3f} y={1 - p.y:.3f}')
+    for name, side in (('BudL', -1), ('BudR', 1)):  # where each bud lands, for the battery row under it
+        p = world_to_camera_view(sc, cam, Vector((side * BUD_X, 0, BUD_Z)))
+        print(f'SCREEN {name} x={p.x:.3f} y={1 - p.y:.3f}')
     p = world_to_camera_view(sc, cam, Vector((0, 0, -1.415)))
     print(f'SCREEN case-bottom y={1 - p.y:.3f}')
 
 
 def main():
     args = sys.argv[sys.argv.index('--') + 1:]
-    root, lid, bud_l, bud_r = prepare(args[0])
-    animate(root, lid, (bud_l, bud_r))
+    root, lid, _, _ = prepare(args[0])
+    animate(root, lid)
     export(args[1])
     if '--preview' in args:
         i = args.index('--preview')
-        preview(args[i + 1], args[i + 2], (bud_l, bud_r))
+        preview(args[i + 1], args[i + 2])
 
 
 main()

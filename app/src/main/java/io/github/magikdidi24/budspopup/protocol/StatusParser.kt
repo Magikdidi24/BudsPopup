@@ -26,7 +26,7 @@ object StatusParser {
         return BudsStatus(
             left = p.u8(batteryAt),
             right = p.u8(batteryAt + 1),
-            case = p.u8(caseAt).takeIf { it in 1..100 },
+            case = p.u8(caseAt).takeIf { it <= 100 },
             placementLeft = Placement.of(placement shr 4),
             placementRight = Placement.of(placement and 0x0F),
             leftCharging = charging and 0x10 != 0,

@@ -64,7 +64,14 @@ import kotlin.math.roundToInt
 // Horizontal centre of the left bud, the case and the right bud in the 3D view (tools/build_model.py prints them).
 private val GAUGE_X = floatArrayOf(0.249f, 0.5f, 0.751f)
 private val GREEN = Color(0xFF34C759)
+private val ORANGE = Color(0xFFFF9500)
 private val RED = Color(0xFFFF3B30)
+
+private fun levelColor(level: Int) = when {
+    level >= 50 -> GREEN
+    level >= 20 -> ORANGE
+    else -> RED
+}
 
 @Composable
 fun PopupCard(
@@ -114,7 +121,12 @@ fun PopupCard(
                 )
                 CloseButton(foreground, onDismiss, Modifier.align(Alignment.CenterEnd))
             }
-            BudsScene(color, Modifier.fillMaxWidth().aspectRatio(SCENE_ASPECT))
+            BudsScene(
+                color,
+                leftOut = status?.placementLeft?.isOut == true,
+                rightOut = status?.placementRight?.isOut == true,
+                modifier = Modifier.fillMaxWidth().aspectRatio(SCENE_ASPECT),
+            )
             BatteryRow(status, foreground)
         }
     }
@@ -156,15 +168,17 @@ private fun BatteryRow(status: BudsStatus?, foreground: Color) {
 @Composable
 private fun BatteryGauge(level: Int?, charging: Boolean, label: String, foreground: Color) {
     val progress by animateFloatAsState((level ?: 0) / 100f, tween(900), label = "battery")
-    val ring = if (level != null && level < 20) RED else GREEN
+    val ring = level?.let(::levelColor) ?: foreground.copy(alpha = 0.12f)
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
         Box(Modifier.size(54.dp), contentAlignment = Alignment.Center) {
             Canvas(Modifier.fillMaxSize()) {
                 val stroke = 5.dp.toPx()
                 val topLeft = Offset(stroke / 2, stroke / 2)
                 val arcSize = Size(size.width - stroke, size.height - stroke)
-                drawArc(foreground.copy(alpha = 0.12f), 0f, 360f, false, topLeft, arcSize, style = Stroke(stroke))
-                if (level != null) {
+                // An empty battery still gets a visible red circle.
+                val track = if (level != null && level < 20) RED.copy(alpha = 0.35f) else foreground.copy(alpha = 0.12f)
+                drawArc(track, 0f, 360f, false, topLeft, arcSize, style = Stroke(stroke))
+                if (level != null && level > 0) {
                     drawArc(ring, -90f, 360f * progress, false, topLeft, arcSize, style = Stroke(stroke, cap = StrokeCap.Round))
                 }
             }
@@ -172,7 +186,7 @@ private fun BatteryGauge(level: Int?, charging: Boolean, label: String, foregrou
         }
         Spacer(Modifier.height(6.dp))
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(3.dp)) {
-            if (charging) Bolt(GREEN)
+            if (charging) Bolt(ring)
             Text(label, color = foreground.copy(alpha = 0.6f), fontSize = 12.sp)
         }
     }

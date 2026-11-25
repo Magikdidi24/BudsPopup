@@ -29,7 +29,7 @@ import kotlinx.coroutines.launch
 
 /**
  * Lives for one case opening: reads the buds over RFCOMM, shows the card if a bud sits in the case,
- * and stops when the case closes (ACL drops), a bud is reported worn, the user dismisses it, or after 5 min.
+ * and stops when the case closes (ACL drops), the user dismisses it, or after 5 min.
  */
 class PopupService : Service() {
     private val scope = MainScope()
@@ -81,8 +81,6 @@ class PopupService : Service() {
                     overlay = OverlayController(this@PopupService).also { it.show(name, status, prefs.color, ::finish) }
                     // shortcut: no signal when the buds are worn and the case shut empty, so a cap; replace with BLE adverts if it bothers
                     launch { delay(MAX_SHOWN_MS); finish() }
-                } else if (overlay != null && s.anyWorn) {
-                    finish()
                 }
             }
             // Samsung's buds manager takes over the SPP link a second after connecting, which drops ours:

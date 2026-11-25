@@ -16,7 +16,12 @@ import com.google.android.filament.utils.Utils
 import io.github.magikdidi24.budspopup.protocol.BudsColor
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
+import kotlin.math.PI
+import kotlin.math.atan2
+import kotlin.math.cos
+import kotlin.math.hypot
 import kotlin.math.min
+import kotlin.math.sin
 
 // Keep in sync with tools/build_model.py (frames at 30 fps, Blender coords turned Y-up: (x, z, -y)).
 private const val OPEN_END = 66f / 30
@@ -26,6 +31,11 @@ private val EYE = doubleArrayOf(0.0, 7.5, 21.0)
 private val TARGET = doubleArrayOf(0.0, 1.3, 0.0)
 private const val FOCAL_LENGTH = 50f
 const val SCENE_ASPECT = 640f / 400f
+private const val LID_OPEN = 1f    // s: frame 30, buds wait for the lid before moving
+private const val BUD_X = 4.3f     // spot beside the case, Blender (±4.3, 0, -0.2)
+private const val BUD_Y = -0.2f
+private const val LIFT = 3.4f      // how high a bud rises out of its slot before moving aside
+private const val TURN = 20f       // degrees each bud turns outwards once beside the case
 
 /** Open sequence once, then the idle loop forever. */
 fun animationTime(seconds: Float) =
@@ -40,9 +50,15 @@ private val BLACK = mapOf(
 )
 
 @Composable
-fun BudsScene(color: BudsColor, modifier: Modifier = Modifier) {
-    AndroidView(factory = { context -> TextureView(context).also { BudsRenderer(it, color) } }, modifier = modifier)
+fun BudsScene(color: BudsColor, leftOut: Boolean, rightOut: Boolean, modifier: Modifier = Modifier) {
+    AndroidView(
+        factory = { context -> TextureView(context).apply { tag = BudsRenderer(this, color) } },
+        update = { (it.tag as BudsRenderer).setOut(leftOut, rightOut) },
+        modifier = modifier,
+    )
 }
+
+private class Bud(val entity: Int, val side: Float, val rest: FloatArray, val motion: BudMotion)
 
 /** Filament renderer on a transparent TextureView, so the card colour shows behind the model. */
 private class BudsRenderer(textureView: TextureView, color: BudsColor) : Choreographer.FrameCallback {
@@ -54,6 +70,16 @@ private class BudsRenderer(textureView: TextureView, color: BudsColor) : Choreog
     )
     private var lastNanos = 0L
     private var seconds = 0f
+    private var leftOut = false
+    private var rightOut = false
+    private var buds: List<Bud>? = null
+    private val matrix = FloatArray(16)
+
+    fun setOut(left: Boolean, right: Boolean) {
+        leftOut = left
+        rightOut = right
+        buds?.let { (l, r) -> l.motion.out = left; r.motion.out = right }
+    }
 
     init {
         val assets = textureView.context.assets
@@ -89,15 +115,67 @@ private class BudsRenderer(textureView: TextureView, color: BudsColor) : Choreog
         if (animator != null && viewer.progress >= 1f) { // start the clock once the model is loaded
             // At most one 30 fps step per frame: the first frames compile shaders and can take
             // seconds, and the open sequence must not be skipped meanwhile.
-            if (lastNanos != 0L) seconds += min((frameTimeNanos - lastNanos) / 1e9f, 1f / 30)
+            val dt = if (lastNanos == 0L) 0f else min((frameTimeNanos - lastNanos) / 1e9f, 1f / 30)
             lastNanos = frameTimeNanos
+            seconds += dt
             val t = animationTime(seconds)
-            // Blender exports one animation per object (case, lid, each bud), all on the same timeline.
+            // Blender exports one animation per object (case, lid), all on the same timeline.
             for (i in 0 until animator.animationCount) animator.applyAnimation(i, t)
             animator.updateBoneMatrices()
+            val buds = buds ?: findBuds().also { buds = it }
+            if (seconds > LID_OPEN) buds.forEach { it.motion.step(dt) }
+            placeBuds(buds)
         }
         viewer.render(frameTimeNanos)
     }
+
+    /** Buds sitting out at the start (already in an ear) are shown beside the case straight away. */
+    private fun findBuds(): List<Bud> {
+        val asset = viewer.asset!!
+        val tm = viewer.engine.transformManager
+        return listOf(Triple("BudL", -1f, leftOut), Triple("BudR", 1f, rightOut)).map { (name, side, out) ->
+            val entity = asset.getFirstEntityByName(name)
+            tm.getTransform(tm.getInstance(entity), matrix)
+            Bud(entity, side, floatArrayOf(matrix[12], matrix[13], matrix[14]), BudMotion(out))
+        }
+    }
+
+    /** Each bud between its slot, which follows the case's sway, and its spot beside the case. */
+    private fun placeBuds(buds: List<Bud>) {
+        val tm = viewer.engine.transformManager
+        tm.getTransform(tm.getInstance(viewer.asset!!.getFirstEntityByName("CaseRoot")), matrix)
+        val caseYaw = atan2(-matrix[2], matrix[0]) // the case only turns around the vertical axis
+        val caseScale = hypot(matrix[0], matrix[2])
+        for (bud in buds) {
+            val m = bud.motion
+            val (rx, ry, rz) = bud.rest
+            val away = m.away
+            val bob = 0.12f * sin(2 * PI.toFloat() * seconds / 3) * away
+            val spot = bud.side * BUD_X
+            pose(
+                x = lerp(caseScale * (cos(caseYaw) * rx + sin(caseYaw) * rz), spot, away),
+                y = lerp(caseScale * ry + LIFT * m.rise, BUD_Y + bob, away),
+                z = lerp(caseScale * (cos(caseYaw) * rz - sin(caseYaw) * rx), 0f, away),
+                yaw = lerp(caseYaw, Math.toRadians((bud.side * (m.spin - TURN)).toDouble()).toFloat(), away),
+                pitch = PI.toFloat() / 2 * away, // lying in the slot, standing once out
+                scale = lerp(caseScale, 1f, away),
+            )
+            tm.setTransform(tm.getInstance(bud.entity), matrix)
+        }
+    }
+
+    /** matrix = translate · rotateY(yaw) · rotateX(pitch) · scale, column-major as Filament wants. */
+    private fun pose(x: Float, y: Float, z: Float, yaw: Float, pitch: Float, scale: Float) {
+        val (ca, sa, cb, sb) = floatArrayOf(cos(yaw), sin(yaw), cos(pitch), sin(pitch))
+        floatArrayOf(
+            ca * scale, 0f, -sa * scale, 0f,
+            sa * sb * scale, cb * scale, ca * sb * scale, 0f,
+            sa * cb * scale, -sb * scale, ca * cb * scale, 0f,
+            x, y, z, 1f,
+        ).copyInto(matrix)
+    }
+
+    private fun lerp(a: Float, b: Float, t: Float) = a + (b - a) * t
 
     companion object {
         init {
