@@ -173,7 +173,7 @@ class MainActivity : ComponentActivity() {
         testOverlay?.remove()
         testScript?.cancel()
         val status = MutableStateFlow<BudsStatus?>(
-            BudsStatus(82, 35, 0, Placement.InCase, Placement.InCase, leftCharging = true, rightCharging = true, color = color),
+            BudsStatus(82, 35, 0, Placement.InCase, Placement.InCase, true, true, caseCharging = true, color = color),
         )
         testOverlay = OverlayController(applicationContext).also { overlay ->
             overlay.show("Galaxy Buds4 Pro", status, color) { overlay.hide {} }
