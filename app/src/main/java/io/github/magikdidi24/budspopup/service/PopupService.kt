@@ -5,12 +5,16 @@ import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.Service
+import android.bluetooth.BluetoothDevice
 import android.bluetooth.BluetoothManager
+import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.content.pm.ServiceInfo
 import android.os.IBinder
 import android.util.Log
+import androidx.core.content.IntentCompat
 import io.github.magikdidi24.budspopup.Prefs
 import io.github.magikdidi24.budspopup.R
 import io.github.magikdidi24.budspopup.TAG
@@ -24,14 +28,15 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
 
 /**
- * Lives for one case opening: reads the buds over RFCOMM, shows the card while a bud sits in the
- * case, and stops when a bud is worn, the case closes (link drops), the user dismisses it, or time runs out.
+ * Lives for one case opening: reads the buds over RFCOMM, shows the card if a bud sits in the case,
+ * and stops when the case closes (ACL drops), a bud is reported worn, the user dismisses it, or after 5 min.
  */
 class PopupService : Service() {
     private val scope = MainScope()
     private var overlay: OverlayController? = null
     private var started = false
     private var finishing = false
+    private var caseClosed: BroadcastReceiver? = null
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -53,6 +58,16 @@ class PopupService : Service() {
         val name = device.alias ?: device.name ?: "Galaxy Buds"
         val prefs = Prefs(this)
         val status = MutableStateFlow<BudsStatus?>(null)
+        // Closing the case with the buds inside drops their link: that is when the card goes away.
+        caseClosed = object : BroadcastReceiver() {
+            override fun onReceive(context: Context, intent: Intent) {
+                val gone = IntentCompat.getParcelableExtra(intent, BluetoothDevice.EXTRA_DEVICE, BluetoothDevice::class.java)
+                if (gone?.address == address) {
+                    Log.i(TAG, "ACL disconnected: case closed")
+                    finish()
+                }
+            }
+        }.also { registerReceiver(it, IntentFilter(BluetoothDevice.ACTION_ACL_DISCONNECTED), RECEIVER_EXPORTED) }
         scope.launch {
             delay(CONNECT_TIMEOUT_MS)
             if (overlay == null) finish() // buds stayed silent or the link never came up
@@ -64,12 +79,16 @@ class PopupService : Service() {
                 status.value = s
                 if (overlay == null && !finishing && s.anyInCase) {
                     overlay = OverlayController(this@PopupService).also { it.show(name, status, prefs.color, ::finish) }
+                    // shortcut: no signal when the buds are worn and the case shut empty, so a cap; replace with BLE adverts if it bothers
                     launch { delay(MAX_SHOWN_MS); finish() }
                 } else if (overlay != null && s.anyWorn) {
                     finish()
                 }
             }
-            finish() // link closed: case shut or out of range
+            // Samsung's buds manager takes over the SPP link a second after connecting, which drops ours:
+            // the card keeps the last status and stays up until the case closes.
+            Log.i(TAG, "RFCOMM link ended")
+            if (overlay == null) finish()
         }
     }
 
@@ -81,6 +100,7 @@ class PopupService : Service() {
 
     override fun onDestroy() {
         scope.cancel() // closes the RFCOMM socket
+        caseClosed?.let { unregisterReceiver(it) }
         overlay?.remove()
         super.onDestroy()
     }
@@ -98,7 +118,7 @@ class PopupService : Service() {
         private const val EXTRA_ADDRESS = "address"
         private const val CHANNEL = "popup"
         private const val CONNECT_TIMEOUT_MS = 15_000L
-        private const val MAX_SHOWN_MS = 60_000L
+        private const val MAX_SHOWN_MS = 5 * 60_000L
 
         fun start(context: Context, address: String) {
             context.startForegroundService(Intent(context, PopupService::class.java).putExtra(EXTRA_ADDRESS, address))

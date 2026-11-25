@@ -103,7 +103,7 @@ class MainActivity : ComponentActivity() {
             }
 
             Section("Écouteurs")
-            if (bluetooth) Devices() else Text("Autorise le Bluetooth pour voir les appareils appairés.")
+            if (bluetooth) Devices(prefs.budsAddress) else Text("Autorise le Bluetooth pour voir les appareils appairés.")
 
             Section("Tester la popup")
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -115,12 +115,13 @@ class MainActivity : ComponentActivity() {
 
     @SuppressLint("MissingPermission") // only composed once BLUETOOTH_CONNECT is granted
     @Composable
-    private fun Devices() {
+    private fun Devices(chosen: String?) {
         val bonded = getSystemService(BluetoothManager::class.java).adapter?.bondedDevices.orEmpty()
+            .filter { it.type != BluetoothDevice.DEVICE_TYPE_LE } // LE Audio identities duplicate the classic entry
             .sortedByDescending { "buds" in (it.name ?: "").lowercase() }
         if (bonded.isEmpty()) Text("Aucun appareil appairé.")
         bonded.forEach { device ->
-            val selected = device.address == prefs.budsAddress
+            val selected = device.address == chosen
             Row(
                 Modifier.fillMaxWidth().selectable(selected, role = Role.RadioButton) { choose(device) },
                 verticalAlignment = Alignment.CenterVertically,
