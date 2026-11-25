@@ -10,7 +10,7 @@ Personal project, not on the Play Store.
 2. It starts a short-lived foreground service (`connectedDevice`). A companion device association lets it start from the background.
 3. The service opens RFCOMM on the buds' SPP service (`2e73a4ad-332d-41fc-90e2-16bef06523f2`) and reads the status messages (`0x60` and `0x61`). Those carry the battery levels, where each bud is (worn, idle, in the case) and the colour.
 4. While a bud is in the case, an overlay window shows the card: Jetpack Compose for the card, Filament for the 3D model.
-5. The card goes away when the case closes with the buds inside (the buds disconnect), 4 s after both buds are out (an empty case closing sends nothing), when you swipe it down or tap outside it, or after 5 min.
+5. The card goes away when the case closes with the buds inside (the buds disconnect), 1 s after both buds are in your ears (an empty case closing sends nothing, so that is the cue), 30 s after both buds are out but not worn, when you swipe it down or tap outside it, or after 5 min.
 
 The model is white or black, picked from the colour the buds report. Rings go green, orange then red as the battery drops, with a bolt while charging.
 

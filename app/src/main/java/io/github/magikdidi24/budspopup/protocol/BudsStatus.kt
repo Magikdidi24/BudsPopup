@@ -29,5 +29,6 @@ data class BudsStatus(
 ) {
     val anyInCase get() = placementLeft.inCase || placementRight.inCase
     val bothOut get() = placementLeft.isOut && placementRight.isOut
+    val bothWorn get() = placementLeft == Placement.Wearing && placementRight == Placement.Wearing
     val shutInCase get() = placementLeft == Placement.InClosedCase || placementRight == Placement.InClosedCase
 }
