@@ -31,6 +31,14 @@ class StatusParserTest {
     }
 
     @Test
+    fun `extended status from my Buds4 Pro, case just opened`() {
+        // Captured on the S25+ on 2026-11-25: both buds in the open case, case level not reported.
+        val s = StatusParser.parse(single(fixture("buds4pro_extended_status_in_case_real")))!!
+        assertEquals(BudsStatus(66, 68, null, Placement.InCase, Placement.InCase, color = BudsColor.Black), s)
+        assertTrue(s.anyInCase)
+    }
+
+    @Test
     fun `status update with both buds in a charging case`() {
         // Synthetic frame (layout of the Buds4 Pro STATUS_UPDATED), CRC computed by hand.
         val s = StatusParser.parse(single(fixture("buds4pro_status_in_case")))!!
