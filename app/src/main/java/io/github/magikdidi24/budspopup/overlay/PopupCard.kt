@@ -7,6 +7,10 @@ import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.Canvas
@@ -152,9 +156,14 @@ private fun CloseButton(foreground: Color, onClick: () -> Unit, modifier: Modifi
 private fun BatteryRow(status: BudsStatus?, foreground: Color) {
     Layout(
         content = {
-            BatteryGauge(status?.left, status?.leftCharging == true, stringResource(R.string.left), foreground)
+            // A bud's level shows only once it is out, as it lands beside the case; the case's always shows.
+            BudGauge(status?.placementLeft?.isOut == true) {
+                BatteryGauge(status?.left, status?.leftCharging == true, stringResource(R.string.left), foreground)
+            }
             BatteryGauge(status?.case, status?.caseCharging == true, stringResource(R.string.case_label), foreground)
-            BatteryGauge(status?.right, status?.rightCharging == true, stringResource(R.string.right), foreground)
+            BudGauge(status?.placementRight?.isOut == true) {
+                BatteryGauge(status?.right, status?.rightCharging == true, stringResource(R.string.right), foreground)
+            }
         },
         modifier = Modifier.fillMaxWidth(),
     ) { measurables, constraints ->
@@ -162,6 +171,17 @@ private fun BatteryRow(status: BudsStatus?, foreground: Color) {
         layout(constraints.maxWidth, placeables.maxOf { it.height }) {
             placeables.forEachIndexed { i, p -> p.place((GAUGE_X[i] * constraints.maxWidth - p.width / 2f).roundToInt(), 0) }
         }
+    }
+}
+
+@Composable
+private fun BudGauge(out: Boolean, content: @Composable () -> Unit) {
+    Box { // always laid out, even empty, so the row keeps each gauge in its own slot
+        AnimatedVisibility(
+            visible = out,
+            enter = fadeIn(tween(400, delayMillis = 700)) + scaleIn(tween(400, delayMillis = 700), initialScale = 0.6f),
+            exit = fadeOut(tween(200)) + scaleOut(tween(200), targetScale = 0.6f),
+        ) { content() }
     }
 }
 

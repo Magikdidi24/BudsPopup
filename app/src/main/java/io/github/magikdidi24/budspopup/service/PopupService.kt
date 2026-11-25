@@ -73,20 +73,26 @@ class PopupService : Service() {
             if (overlay == null) finish() // buds stayed silent or the link never came up
         }
         scope.launch {
-            RfcommTransport.statuses(device).collect { s ->
-                Log.d(TAG, "status $s")
-                s.color?.let { prefs.color = it }
-                status.value = s
-                if (overlay == null && !finishing && s.anyInCase) {
-                    overlay = OverlayController(this@PopupService).also { it.show(name, status, prefs.color, ::finish) }
-                    // shortcut: no signal when the buds are worn and the case shut empty, so a cap; replace with BLE adverts if it bothers
-                    launch { delay(MAX_SHOWN_MS); finish() }
+            var retakes = 0
+            while (true) {
+                RfcommTransport.statuses(device).collect { s ->
+                    Log.d(TAG, "status $s")
+                    s.color?.let { prefs.color = it }
+                    status.value = s
+                    if (overlay == null && !finishing && s.anyInCase) {
+                        overlay = OverlayController(this@PopupService).also { it.show(name, status, prefs.color, ::finish) }
+                        // shortcut: no signal when the buds are worn and the case shut empty, so a cap; replace with BLE adverts if it bothers
+                        launch { delay(MAX_SHOWN_MS); finish() }
+                    }
                 }
+                Log.i(TAG, "RFCOMM link ended")
+                if (overlay == null) { finish(); break }
+                // Samsung's buds manager wants the only SPP channel too: each of its 3 tries over ~6 s
+                // drops ours, then it gives up. Taking the link back until then keeps the card live.
+                if (finishing || ++retakes > MAX_RETAKES) break
+                delay(RETAKE_DELAY_MS)
+                Log.i(TAG, "retaking the SPP link ($retakes/$MAX_RETAKES)")
             }
-            // Samsung's buds manager takes over the SPP link a second after connecting, which drops ours:
-            // the card keeps the last status and stays up until the case closes.
-            Log.i(TAG, "RFCOMM link ended")
-            if (overlay == null) finish()
         }
     }
 
@@ -117,6 +123,8 @@ class PopupService : Service() {
         private const val CHANNEL = "popup"
         private const val CONNECT_TIMEOUT_MS = 15_000L
         private const val MAX_SHOWN_MS = 5 * 60_000L
+        private const val MAX_RETAKES = 8
+        private const val RETAKE_DELAY_MS = 2_000L
 
         fun start(context: Context, address: String) {
             context.startForegroundService(Intent(context, PopupService::class.java).putExtra(EXTRA_ADDRESS, address))
