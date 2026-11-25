@@ -10,12 +10,14 @@ import io.github.magikdidi24.budspopup.protocol.SonyFrame
 import io.github.magikdidi24.budspopup.protocol.SonyFrameSplitter
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.awaitClose
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.channelFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.IOException
 import java.util.UUID
+import java.util.concurrent.atomic.AtomicBoolean
 
 /** Battery of Sony over-ear headphones (WH-1000XM4 and other "v1" models). */
 object SonyTransport {
@@ -29,17 +31,25 @@ object SonyTransport {
     @RequiresPermission(Manifest.permission.BLUETOOTH_CONNECT)
     fun battery(device: BluetoothDevice): Flow<HeadphonesStatus> = channelFlow {
         val socket = withContext(Dispatchers.IO) { RfcommTransport.connect(device, SERVICE) } ?: return@channelFlow
+        val out = socket.outputStream
+        fun write(frame: SonyFrame) = synchronized(out) { out.write(frame.encode()); out.flush() }
+        val acked = AtomicBoolean(false)
         launch(Dispatchers.IO) {
-            val out = socket.outputStream
-            fun write(frame: SonyFrame) = out.write(frame.encode()).also { out.flush() }
+            // Measured on a WH-1000XM4: a hello sent as the link opens is ignored while the headphones
+            // are still starting up (they first speak ~1.6 s later), so repeat it until they ack it.
+            repeat(6) {
+                if (acked.get()) return@launch
+                runCatching { write(SonyFrame(SonyFrame.COMMAND, 0, HeadphonesStatus.INIT_REQUEST)) }
+                delay(1_500)
+            }
+        }
+        launch(Dispatchers.IO) {
             var sequence = 0
-            var acked = false
             var initialised = false
             var asked = false
             val splitter = SonyFrameSplitter()
             val buf = ByteArray(1024)
             try {
-                write(SonyFrame(SonyFrame.COMMAND, sequence, HeadphonesStatus.INIT_REQUEST))
                 val input = socket.inputStream
                 while (true) {
                     val n = input.read(buf)
@@ -48,13 +58,13 @@ object SonyTransport {
                     for (frame in splitter.feed(buf, n)) {
                         if (frame.type == SonyFrame.ACK) {
                             sequence = frame.sequence
-                            acked = true
+                            acked.set(true)
                         } else {
                             write(SonyFrame(SonyFrame.ACK, 1 - frame.sequence, ByteArray(0)))
                             if (HeadphonesStatus.isInitReply(frame)) initialised = true
                             HeadphonesStatus.parse(frame)?.let { send(it) }
                         }
-                        if (acked && initialised && !asked) {
+                        if (acked.get() && initialised && !asked) {
                             asked = true
                             write(SonyFrame(SonyFrame.COMMAND, sequence, HeadphonesStatus.BATTERY_REQUEST))
                         }

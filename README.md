@@ -23,7 +23,6 @@ On Samsung phones, Samsung's own buds manager wants the same SPP channel and onl
 - The card is an overlay window, so it does not show on the lock screen.
 - Samsung's own buds popup still appears next to this one.
 - While the card is up, Samsung's buds manager has no SPP link, so the Buds settings in One UI are not live until the buds reconnect.
-- The headphones card has only been tried with fake values so far, not with real headphones.
 - An empty case closing sends nothing. If the buds are out but never worn, the card stays up to 30 s unless you swipe it away.
 
 ## Build

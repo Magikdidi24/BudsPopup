@@ -37,6 +37,17 @@ class SonyFrameTest {
     }
 
     @Test
+    fun `real WH-1000XM4 session, captured on the S25+`() {
+        // 2026-11-25 20:22: ack of our hello, the v1 hello reply, the ack of our battery request, then 70 %.
+        val stream = hex("3e 01 01 00 00 00 00 02 3c 3e 0c 01 00 00 00 04 01 00 70 00 82 3c " +
+            "3e 01 00 00 00 00 00 01 3c 3e 0c 01 00 00 00 04 11 00 46 00 68 3c")
+        val frames = SonyFrameSplitter().feed(stream)
+        assertEquals(listOf(SonyFrame.ACK, SonyFrame.COMMAND, SonyFrame.ACK, SonyFrame.COMMAND), frames.map { it.type })
+        assertTrue(HeadphonesStatus.isInitReply(frames[1]))
+        assertEquals(HeadphonesStatus(70, false), HeadphonesStatus.parse(frames[3]))
+    }
+
+    @Test
     fun `notifications count, other messages and bad checksums do not`() {
         val notify = SonyFrame(SonyFrame.COMMAND, 0, hex("13 00 20 00"))
         assertEquals(HeadphonesStatus(32, false), HeadphonesStatus.parse(notify))
