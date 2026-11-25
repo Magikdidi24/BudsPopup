@@ -28,4 +28,6 @@ data class BudsStatus(
     val color: BudsColor? = null,
 ) {
     val anyInCase get() = placementLeft.inCase || placementRight.inCase
+    val bothOut get() = placementLeft.isOut && placementRight.isOut
+    val shutInCase get() = placementLeft == Placement.InClosedCase || placementRight == Placement.InClosedCase
 }

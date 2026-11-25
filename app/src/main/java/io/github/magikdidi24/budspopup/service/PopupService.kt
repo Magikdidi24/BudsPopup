@@ -21,6 +21,7 @@ import io.github.magikdidi24.budspopup.TAG
 import io.github.magikdidi24.budspopup.bluetooth.RfcommTransport
 import io.github.magikdidi24.budspopup.overlay.OverlayController
 import io.github.magikdidi24.budspopup.protocol.BudsStatus
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.MainScope
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
@@ -29,7 +30,8 @@ import kotlinx.coroutines.launch
 
 /**
  * Lives for one case opening: reads the buds over RFCOMM, shows the card if a bud sits in the case,
- * and stops when the case closes (ACL drops), the user dismisses it, or after 5 min.
+ * and stops when the case closes (ACL drops or a bud reports a closed case), 4 s after both buds are
+ * out, when the user dismisses it, or after 5 min.
  */
 class PopupService : Service() {
     private val scope = MainScope()
@@ -74,15 +76,25 @@ class PopupService : Service() {
         }
         scope.launch {
             var retakes = 0
+            var bothOut: Job? = null
             while (true) {
                 RfcommTransport.statuses(device).collect { s ->
                     Log.d(TAG, "status $s")
                     s.color?.let { prefs.color = it }
                     status.value = s
-                    if (overlay == null && !finishing && s.anyInCase) {
-                        overlay = OverlayController(this@PopupService).also { it.show(name, status, prefs.color, ::finish) }
-                        // shortcut: no signal when the buds are worn and the case shut empty, so a cap; replace with BLE adverts if it bothers
-                        launch { delay(MAX_SHOWN_MS); finish() }
+                    when {
+                        s.shutInCase -> finish() // the lid closed on a bud while the other is out
+                        overlay == null && !finishing && s.anyInCase -> {
+                            overlay = OverlayController(this@PopupService).also { it.show(name, status, prefs.color, ::finish) }
+                            launch { delay(MAX_SHOWN_MS); finish() }
+                        }
+                    }
+                    // An empty case closing sends nothing and both buds stay connected, so once both are out
+                    // the card leaves by itself after their levels have been seen; putting one back cancels it.
+                    bothOut = when {
+                        !s.bothOut -> bothOut?.cancel().let { null }
+                        bothOut != null -> bothOut
+                        else -> launch { delay(BOTH_OUT_MS); finish() }
                     }
                 }
                 Log.i(TAG, "RFCOMM link ended")
@@ -123,8 +135,9 @@ class PopupService : Service() {
         private const val CHANNEL = "popup"
         private const val CONNECT_TIMEOUT_MS = 15_000L
         private const val MAX_SHOWN_MS = 5 * 60_000L
+        private const val BOTH_OUT_MS = 4_000L
         private const val MAX_RETAKES = 8
-        private const val RETAKE_DELAY_MS = 2_000L
+        private const val RETAKE_DELAY_MS = 300L // short: until Samsung gives up, every drop leaves the card blind
 
         fun start(context: Context, address: String) {
             context.startForegroundService(Intent(context, PopupService::class.java).putExtra(EXTRA_ADDRESS, address))

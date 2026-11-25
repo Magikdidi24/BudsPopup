@@ -129,8 +129,8 @@ def animate(root, lid):
             s = lerp(0.82, 1.0, ease_out_back(phase(f, 0, 14)))
             root.scale = (s, s, s)
             root.rotation_euler = (0, 0, math.radians(lerp(-18, 0, ease(phase(f, 0, 40)))))
-            # The lid waits for the card to finish sliding in, so the opening is seen.
-            lid.rotation_euler = (math.radians(LID_OPEN * ease_out_back(phase(f, 20, 44), 1.1)), 0, 0)
+            # The lid opens as soon as the card is up (the 3D starts ~0.35 s after the card), quick but seen.
+            lid.rotation_euler = (math.radians(LID_OPEN * ease_out_back(phase(f, 9, 26), 1.1)), 0, 0)
         else:
             t = (max(f, IDLE_START) - IDLE_START) / (IDLE_END - IDLE_START)
             root.scale = (1, 1, 1)

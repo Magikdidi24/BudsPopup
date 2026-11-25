@@ -61,7 +61,7 @@ object RfcommTransport {
             } catch (e: IOException) {
                 socket.close()
                 Log.w(TAG, "RFCOMM connect ${attempt + 1}/3 failed: ${e.message}")
-                delay(700)
+                delay(250) // the first try right after the buds reconnect often fails
             }
         }
         return null

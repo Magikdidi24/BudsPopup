@@ -93,7 +93,7 @@ fun PopupCard(
 
     AnimatedVisibility(
         visibleState = visible,
-        enter = slideInVertically(spring(dampingRatio = 0.8f, stiffness = Spring.StiffnessMediumLow)) { it },
+        enter = slideInVertically(spring(dampingRatio = 0.8f, stiffness = Spring.StiffnessMedium)) { it },
         exit = slideOutVertically(tween(250)) { it },
     ) {
         Column(

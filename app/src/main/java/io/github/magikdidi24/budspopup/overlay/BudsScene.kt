@@ -1,6 +1,7 @@
 package io.github.magikdidi24.budspopup.overlay
 
 import android.content.res.AssetManager
+import android.util.Log
 import android.view.Choreographer
 import android.view.TextureView
 import androidx.compose.runtime.Composable
@@ -13,6 +14,7 @@ import com.google.android.filament.android.UiHelper
 import com.google.android.filament.utils.KTX1Loader
 import com.google.android.filament.utils.ModelViewer
 import com.google.android.filament.utils.Utils
+import io.github.magikdidi24.budspopup.TAG
 import io.github.magikdidi24.budspopup.protocol.BudsColor
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
@@ -31,7 +33,7 @@ private val EYE = doubleArrayOf(0.0, 7.5, 21.0)
 private val TARGET = doubleArrayOf(0.0, 1.3, 0.0)
 private const val FOCAL_LENGTH = 50f
 const val SCENE_ASPECT = 640f / 400f
-private const val LID_OPEN = 1.5f  // s: frame 44, buds wait for the lid before moving
+private const val LID_OPEN = 0.9f  // s: frame 26, buds wait for the lid before moving
 private const val BUD_X = 4.3f     // spot beside the case, Blender (±4.3, 0, -0.2)
 private const val BUD_Y = -0.2f
 private const val LIFT = 3.4f      // how high a bud rises out of its slot before moving aside
@@ -115,6 +117,7 @@ private class BudsRenderer(textureView: TextureView, color: BudsColor) : Choreog
         if (animator != null && viewer.progress >= 1f) { // start the clock once the model is loaded
             // At most one 30 fps step per frame: the first frames compile shaders and can take
             // seconds, and the open sequence must not be skipped meanwhile.
+            if (lastNanos == 0L) Log.i(TAG, "3D model ready")
             val dt = if (lastNanos == 0L) 0f else min((frameTimeNanos - lastNanos) / 1e9f, 1f / 30)
             lastNanos = frameTimeNanos
             seconds += dt
