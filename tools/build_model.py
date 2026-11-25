@@ -61,7 +61,8 @@ def prepare(src):
     bpy.ops.wm.read_factory_settings(use_empty=True)
     bpy.ops.import_scene.gltf(filepath=src)
     objs = bpy.data.objects
-    bpy.data.objects.remove(objs['Curve.001'])  # brand logo
+    if 'Curve.001' in objs:  # brand logo of the original upload; the copy in model/ has it removed
+        bpy.data.objects.remove(objs['Curve.001'])
     meshes = [o for o in objs if o.type == 'MESH']
     for o in objs:
         o.select_set(o in meshes)
