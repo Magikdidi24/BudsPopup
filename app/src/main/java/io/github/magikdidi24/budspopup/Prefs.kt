@@ -13,6 +13,10 @@ class Prefs(context: Context) {
         get() = sp.getString("buds_address", null)
         set(value) = sp.edit { putString("buds_address", value) }
 
+    var headphonesAddress: String?
+        get() = sp.getString("headphones_address", null)
+        set(value) = sp.edit { putString("headphones_address", value) }
+
     /** Last colour the buds reported; the plain status message does not carry it. */
     var color: BudsColor
         get() = BudsColor.valueOf(sp.getString("color", null) ?: BudsColor.White.name)

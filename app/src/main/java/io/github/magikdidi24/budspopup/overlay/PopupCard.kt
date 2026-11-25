@@ -61,6 +61,7 @@ import androidx.compose.ui.unit.sp
 import io.github.magikdidi24.budspopup.R
 import io.github.magikdidi24.budspopup.protocol.BudsColor
 import io.github.magikdidi24.budspopup.protocol.BudsStatus
+import io.github.magikdidi24.budspopup.protocol.HeadphonesStatus
 import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
 
@@ -81,10 +82,9 @@ private fun levelColor(level: Int) = when {
 @Composable
 fun PopupCard(
     title: String,
-    status: BudsStatus?,
-    color: BudsColor,
     visible: MutableTransitionState<Boolean>,
     onDismiss: () -> Unit,
+    content: @Composable (foreground: Color) -> Unit,
 ) {
     val dark = isSystemInDarkTheme()
     val background = if (dark) Color(0xFF1C1C1E) else Color.White
@@ -127,14 +127,29 @@ fun PopupCard(
                 )
                 CloseButton(foreground, onDismiss, Modifier.align(Alignment.CenterEnd))
             }
-            BudsScene(
-                color,
-                leftOut = status?.placementLeft?.isOut == true,
-                rightOut = status?.placementRight?.isOut == true,
-                modifier = Modifier.fillMaxWidth().aspectRatio(SCENE_ASPECT),
-            )
-            BatteryRow(status, foreground)
+            content(foreground)
         }
+    }
+}
+
+/** Buds: the case and the pair in 3D, the case's ring and each bud's once it is out. */
+@Composable
+fun BudsCardContent(status: BudsStatus?, color: BudsColor, foreground: Color) {
+    BudsScene(
+        color,
+        leftOut = status?.placementLeft?.isOut == true,
+        rightOut = status?.placementRight?.isOut == true,
+        modifier = Modifier.fillMaxWidth().aspectRatio(SCENE_ASPECT),
+    )
+    BatteryRow(status, foreground)
+}
+
+/** Over-ear headphones: the model turning in 3D and one ring, like the AirPods Max card. */
+@Composable
+fun HeadphonesCardContent(status: HeadphonesStatus?, foreground: Color) {
+    HeadphonesScene(Modifier.fillMaxWidth().aspectRatio(SCENE_ASPECT))
+    Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+        BatteryGauge(status?.level, status?.charging == true, null, foreground)
     }
 }
 

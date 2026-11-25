@@ -7,9 +7,9 @@ import android.view.MotionEvent
 import android.view.WindowManager
 import androidx.compose.animation.core.MutableTransitionState
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.getValue
+import androidx.compose.runtime.Composable
 import androidx.compose.runtime.snapshotFlow
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.ComposeView
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleRegistry
@@ -17,9 +17,6 @@ import androidx.lifecycle.setViewTreeLifecycleOwner
 import androidx.savedstate.SavedStateRegistryController
 import androidx.savedstate.SavedStateRegistryOwner
 import androidx.savedstate.setViewTreeSavedStateRegistryOwner
-import io.github.magikdidi24.budspopup.protocol.BudsColor
-import io.github.magikdidi24.budspopup.protocol.BudsStatus
-import kotlinx.coroutines.flow.StateFlow
 
 /** Puts the [PopupCard] in a system overlay window at the bottom of the screen. */
 class OverlayController(private val context: Context) {
@@ -29,7 +26,7 @@ class OverlayController(private val context: Context) {
     private var owner: OverlayOwner? = null
     private var onHidden: (() -> Unit)? = null
 
-    fun show(title: String, status: StateFlow<BudsStatus?>, color: BudsColor, onDismiss: () -> Unit) {
+    fun show(title: String, onDismiss: () -> Unit, content: @Composable (foreground: Color) -> Unit) {
         val owner = OverlayOwner().also { owner = it }
         visible.targetState = true
         val view = ComposeView(context).apply {
@@ -37,8 +34,7 @@ class OverlayController(private val context: Context) {
             setViewTreeLifecycleOwner(owner)
             setViewTreeSavedStateRegistryOwner(owner)
             setContent {
-                val s by status.collectAsState()
-                PopupCard(title, s, color, visible, onDismiss)
+                PopupCard(title, visible, onDismiss, content)
                 LaunchedEffect(Unit) {
                     snapshotFlow { !visible.targetState && !visible.currentState && visible.isIdle }.collect { done ->
                         if (done) post { remove() } // not from inside the composition being torn down

@@ -2,6 +2,8 @@
 
 An AirPods-style battery card for the Galaxy Buds4 Pro on Android, laid out like the iPhone one. Open the case and a card slides up from the bottom of the screen with a 3D case that opens its lid, turning slowly like on a turntable, with the case's battery level. Take a bud out and it rises from the case and joins the pair on the left while the case slides right, with its own battery level under it. Put it back and it flies back into its slot. Each bud moves on its own.
 
+It also has a card for Sony WH-1000XM4 headphones: when they connect, the headphones turn in 3D with their battery ring under them, like the AirPods Max card.
+
 Personal project, not on the Play Store. Tested with Galaxy Buds4 Pro on a Galaxy S25+ (Android 17, One UI 9). It needs Android 12 or later. The message offsets and the 3D model are for the Buds4 Pro, so other Galaxy Buds would need changes.
 
 ## How it works
@@ -21,6 +23,7 @@ On Samsung phones, Samsung's own buds manager wants the same SPP channel and onl
 - The card is an overlay window, so it does not show on the lock screen.
 - Samsung's own buds popup still appears next to this one.
 - While the card is up, Samsung's buds manager has no SPP link, so the Buds settings in One UI are not live until the buds reconnect.
+- The headphones card has only been tried with fake values so far, not with real headphones.
 - An empty case closing sends nothing. If the buds are out but never worn, the card stays up to 30 s unless you swipe it away.
 
 ## Build
@@ -44,6 +47,7 @@ blender -b --factory-startup --python tools/build_model.py -- \
 
 - 3D model: ["SUMSUNG Buds 4 Pro"](https://sketchfab.com/3d-models/none-67456ae938ac40d8999b27266a59189d) by [zhe_kan](https://sketchfab.com/zhe_kan), licensed [CC BY-NC-SA 4.0](http://creativecommons.org/licenses/by-nc-sa/4.0/). In `model/` the logo is removed. In `buds.glb` the earbuds are also split, the lid pivots on its hinge and the case and lid animation is added. `model/` and `buds.glb` keep the same license.
 - Lighting: [Studio Small 09](https://polyhaven.com/a/studio_small_09) from Poly Haven (CC0), turned into `studio_ibl.ktx` with Filament's `cmgen`.
-- Message layout: [GalaxyBudsClient](https://github.com/timschneeb/GalaxyBudsClient) docs and test captures. No code was copied from it.
+- Headphones model: ["Sony WH-1000XM4 - Black and brown"](https://sketchfab.com/3d-models/sony-wh-1000xm4-black-and-brown-18e9aa472d884f95897a3e70ee38026b) by [La_Grekula](https://sketchfab.com/La_Grekula), licensed [CC BY 4.0](http://creativecommons.org/licenses/by/4.0/). In `headphones.glb` the logos are removed, the mesh is lighter and the leather is black. `tools/build_headphones.py` builds it from the downloaded source, which is not in the repo (30 MB).
+- Message layout: [GalaxyBudsClient](https://github.com/timschneeb/GalaxyBudsClient) docs and test captures for the buds, [Gadgetbridge](https://codeberg.org/Freeyourgadget/Gadgetbridge) for the Sony headphones. No code was copied from either.
 
-Galaxy Buds is a Samsung trademark. This app is not affiliated with Samsung.
+Galaxy Buds is a Samsung trademark and WH-1000XM4 a Sony one. This app is not affiliated with either.

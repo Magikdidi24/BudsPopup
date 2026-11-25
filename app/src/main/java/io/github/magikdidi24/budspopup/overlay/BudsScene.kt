@@ -40,6 +40,7 @@ private const val LIFT = 3.4f      // how high a bud rises out of its slot befor
 private const val TURN = 20f       // degrees each bud of the pair turns outwards
 private const val TURN_PERIOD = 7f // s per turn of the turntable, as on the iPhone
 private const val TURN_RAMP = 1f   // s to reach that speed once the lid is open
+private const val POP_IN = 14f / 30 // s, the headphones' pop-in, as long as the case's
 
 /** Base colours of the black buds; the asset itself is the white model. */
 private val BLACK = mapOf(
@@ -58,10 +59,22 @@ fun BudsScene(color: BudsColor, leftOut: Boolean, rightOut: Boolean, modifier: M
     )
 }
 
+@Composable
+fun HeadphonesScene(modifier: Modifier = Modifier) {
+    AndroidView(
+        factory = { context -> TextureView(context).apply { tag = BudsRenderer(this, BudsColor.Black, headphones = true) } },
+        modifier = modifier,
+    )
+}
+
 private class Bud(val entity: Int, val side: Float, val rest: FloatArray, val motion: BudMotion)
 
 /** Filament renderer on a transparent TextureView, so the card colour shows behind the model. */
-private class BudsRenderer(textureView: TextureView, color: BudsColor) : Choreographer.FrameCallback {
+private class BudsRenderer(
+    textureView: TextureView,
+    color: BudsColor,
+    private val headphones: Boolean = false,
+) : Choreographer.FrameCallback {
     private val choreographer = Choreographer.getInstance()
     private val viewer = ModelViewer(
         textureView,
@@ -88,7 +101,7 @@ private class BudsRenderer(textureView: TextureView, color: BudsColor) : Choreog
         // The default tone mapper turns the white plastic cream; PBR Neutral keeps whites white.
         viewer.view.colorGrading = ColorGrading.Builder().toneMapper(ToneMapper.PBRNeutral()).build(viewer.engine)
         viewer.renderer.clearOptions = viewer.renderer.clearOptions.apply { clear = true }
-        viewer.loadModelGlb(assets.buffer("buds.glb"))
+        viewer.loadModelGlb(assets.buffer(if (headphones) "headphones.glb" else "buds.glb"))
         val ibl = KTX1Loader.createIndirectLight(viewer.engine, assets.buffer("studio_ibl.ktx"))
         viewer.scene.indirectLight = ibl.indirectLight?.apply { intensity = 30_000f }
         viewer.indirectLightCubemap = ibl.cubemap // destroyed with the viewer
@@ -96,7 +109,7 @@ private class BudsRenderer(textureView: TextureView, color: BudsColor) : Choreog
         lights.setDirection(lights.getInstance(viewer.light), 0.3f, -1f, -0.6f)
         viewer.cameraFocalLength = FOCAL_LENGTH
         viewer.camera.lookAt(EYE[0], EYE[1], EYE[2], TARGET[0], TARGET[1], TARGET[2], 0.0, 1.0, 0.0)
-        if (color == BudsColor.Black) {
+        if (!headphones && color == BudsColor.Black) { // the headphones asset is black already
             viewer.asset?.instance?.materialInstances?.forEach { mi ->
                 BLACK[mi.name]?.let { (r, g, b, a) -> mi.setParameter("baseColorFactor", r, g, b, a) }
             }
@@ -122,9 +135,13 @@ private class BudsRenderer(textureView: TextureView, color: BudsColor) : Choreog
             // Blender exports one animation per object (case, lid), all on the same timeline.
             for (i in 0 until animator.animationCount) animator.applyAnimation(i, min(seconds, OPEN_END))
             animator.updateBoneMatrices()
-            val buds = buds ?: findBuds().also { buds = it }
-            if (seconds > LID_OPEN) buds.forEach { it.motion.step(dt) }
-            placeScene(buds)
+            if (headphones) {
+                placeHeadphones()
+            } else {
+                val buds = buds ?: findBuds().also { buds = it }
+                if (seconds > LID_OPEN) buds.forEach { it.motion.step(dt) }
+                placeScene(buds)
+            }
         }
         viewer.render(frameTimeNanos)
     }
@@ -149,7 +166,7 @@ private class BudsRenderer(textureView: TextureView, color: BudsColor) : Choreog
         val case = tm.getInstance(viewer.asset!!.getFirstEntityByName("CaseRoot"))
         tm.getTransform(case, matrix)
         val scale = hypot(matrix[0], matrix[2]) // the baked pop-in
-        val yaw = turn(seconds)
+        val yaw = turn(seconds, LID_OPEN)
         val (c, s) = cos(yaw) to sin(yaw)
         val caseX = CASE_X * buds.maxOf { it.motion.away }
         pose(caseX, 0f, 0f, yaw, 0f, scale)
@@ -170,10 +187,18 @@ private class BudsRenderer(textureView: TextureView, color: BudsColor) : Choreog
         }
     }
 
-    /** Turntable angle: still while the lid opens, then up to one turn every [TURN_PERIOD]. */
-    private fun turn(t: Float): Float {
+    /** The headphones pop in, then turn like the buds scene, from the start. */
+    private fun placeHeadphones() {
+        val tm = viewer.engine.transformManager
+        val back = (min(seconds / POP_IN, 1f) - 1).let { 1 + 2.4f * it * it * it + 1.4f * it * it } // ease out, slight overshoot
+        pose(0f, 0f, 0f, turn(seconds, POP_IN), 0f, lerp(0.82f, 1f, back))
+        tm.setTransform(tm.getInstance(viewer.asset!!.getFirstEntityByName("Headphones")), matrix)
+    }
+
+    /** Turntable angle: still until [start], then up to one turn every [TURN_PERIOD]. */
+    private fun turn(t: Float, start: Float): Float {
         val speed = 2 * PI.toFloat() / TURN_PERIOD
-        val d = t - LID_OPEN
+        val d = t - start
         return when {
             d <= 0f -> 0f
             d < TURN_RAMP -> speed * d * d / (2 * TURN_RAMP)

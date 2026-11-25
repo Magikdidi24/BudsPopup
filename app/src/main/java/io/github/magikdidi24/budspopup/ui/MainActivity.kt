@@ -47,9 +47,13 @@ import androidx.compose.ui.unit.dp
 import androidx.core.net.toUri
 import io.github.magikdidi24.budspopup.Prefs
 import io.github.magikdidi24.budspopup.TAG
+import androidx.compose.runtime.collectAsState
+import io.github.magikdidi24.budspopup.overlay.BudsCardContent
+import io.github.magikdidi24.budspopup.overlay.HeadphonesCardContent
 import io.github.magikdidi24.budspopup.overlay.OverlayController
 import io.github.magikdidi24.budspopup.protocol.BudsColor
 import io.github.magikdidi24.budspopup.protocol.BudsStatus
+import io.github.magikdidi24.budspopup.protocol.HeadphonesStatus
 import io.github.magikdidi24.budspopup.protocol.Placement
 import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.Job
@@ -109,25 +113,26 @@ class MainActivity : ComponentActivity() {
             }
 
             Section("Écouteurs")
-            if (bluetooth) Devices(prefs.budsAddress) else Text("Autorise le Bluetooth pour voir les appareils appairés.")
+            if (bluetooth) Devices(setOf(prefs.budsAddress, prefs.headphonesAddress)) else Text("Autorise le Bluetooth pour voir les appareils appairés.")
 
             Section("Tester la popup")
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 OutlinedButton(onClick = { testPopup(BudsColor.White) }) { Text("Blanc") }
                 OutlinedButton(onClick = { testPopup(BudsColor.Black) }) { Text("Noir") }
+                OutlinedButton(onClick = { testHeadphones() }) { Text("Casque") }
             }
         }
     }
 
     @SuppressLint("MissingPermission") // only composed once BLUETOOTH_CONNECT is granted
     @Composable
-    private fun Devices(chosen: String?) {
+    private fun Devices(chosen: Set<String?>) {
         val bonded = getSystemService(BluetoothManager::class.java).adapter?.bondedDevices.orEmpty()
             .filter { it.type != BluetoothDevice.DEVICE_TYPE_LE } // LE Audio identities duplicate the classic entry
-            .sortedByDescending { "buds" in (it.name ?: "").lowercase() }
-        if (bonded.isEmpty()) Text("Aucun appareil appairé.")
+            .filter { isHeadphones(it) != null }
+        if (bonded.isEmpty()) Text("Aucun appareil compatible appairé (Galaxy Buds, casque Sony WH).")
         bonded.forEach { device ->
-            val selected = device.address == chosen
+            val selected = device.address in chosen
             Row(
                 Modifier.fillMaxWidth().selectable(selected, role = Role.RadioButton) { choose(device) },
                 verticalAlignment = Alignment.CenterVertically,
@@ -135,14 +140,25 @@ class MainActivity : ComponentActivity() {
                 RadioButton(selected = selected, onClick = null)
                 Column(Modifier.padding(start = 8.dp)) {
                     Text(device.alias ?: device.name ?: device.address)
-                    Text(device.address, style = MaterialTheme.typography.bodySmall)
+                    Text(if (isHeadphones(device) == true) "Casque Sony" else "Galaxy Buds", style = MaterialTheme.typography.bodySmall)
                 }
             }
         }
     }
 
+    /** true for Sony over-ear headphones, false for Galaxy Buds, null for anything else. */
+    @SuppressLint("MissingPermission")
+    private fun isHeadphones(device: BluetoothDevice): Boolean? {
+        val name = (device.name ?: "").lowercase()
+        return when {
+            name.startsWith("wh-") -> true // shortcut: Sony "v1" over-ear models only; WF earbuds report two batteries
+            "buds" in name -> false
+            else -> null
+        }
+    }
+
     private fun choose(device: BluetoothDevice) {
-        prefs.budsAddress = device.address
+        if (isHeadphones(device) == true) prefs.headphonesAddress = device.address else prefs.budsAddress = device.address
         refresh.intValue++
         // A companion association lets the ACL receiver start the foreground service from the background.
         val cdm = getSystemService(CompanionDeviceManager::class.java) ?: return
@@ -165,6 +181,18 @@ class MainActivity : ComponentActivity() {
         }, null)
     }
 
+    private fun testHeadphones() {
+        if (!Settings.canDrawOverlays(this)) {
+            startActivity(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, "package:$packageName".toUri()))
+            return
+        }
+        testOverlay?.remove()
+        testScript?.cancel()
+        testOverlay = OverlayController(applicationContext).also { overlay ->
+            overlay.show("WH-1000XM4", { overlay.hide {} }) { fg -> HeadphonesCardContent(HeadphonesStatus(72, false), fg) }
+        }
+    }
+
     private fun testPopup(color: BudsColor) {
         if (!Settings.canDrawOverlays(this)) {
             startActivity(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, "package:$packageName".toUri()))
@@ -176,7 +204,7 @@ class MainActivity : ComponentActivity() {
             BudsStatus(82, 35, 0, Placement.InCase, Placement.InCase, true, true, caseCharging = true, color = color),
         )
         testOverlay = OverlayController(applicationContext).also { overlay ->
-            overlay.show("Galaxy Buds4 Pro", status, color) { overlay.hide {} }
+            overlay.show("Galaxy Buds4 Pro", { overlay.hide {} }) { fg -> BudsCardContent(status.collectAsState().value, color, fg) }
         }
         // Take each bud out and put it back at its own time, like a real case.
         testScript = lifecycleScope.launch {

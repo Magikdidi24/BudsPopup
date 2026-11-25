@@ -26,7 +26,7 @@ object RfcommTransport {
     /** Status messages from the buds until the link drops or the collector stops. Empty if it cannot connect. */
     @RequiresPermission(Manifest.permission.BLUETOOTH_CONNECT)
     fun statuses(device: BluetoothDevice): Flow<BudsStatus> = channelFlow {
-        val socket = withContext(Dispatchers.IO) { connect(device) } ?: return@channelFlow
+        val socket = withContext(Dispatchers.IO) { connect(device, SPP_UUID) } ?: return@channelFlow
         launch(Dispatchers.IO) {
             val splitter = SppFrameSplitter()
             val buf = ByteArray(2048)
@@ -50,10 +50,10 @@ object RfcommTransport {
     }
 
     @RequiresPermission(Manifest.permission.BLUETOOTH_CONNECT)
-    private suspend fun connect(device: BluetoothDevice): BluetoothSocket? {
-        // The Galaxy Wearable app may hold the only SPP link: retry briefly, then give up quietly.
+    internal suspend fun connect(device: BluetoothDevice, uuid: UUID): BluetoothSocket? {
+        // The maker's own app may hold the only link: retry briefly, then give up quietly.
         repeat(3) { attempt ->
-            val socket = device.createRfcommSocketToServiceRecord(SPP_UUID)
+            val socket = device.createRfcommSocketToServiceRecord(uuid)
             try {
                 socket.connect()
                 Log.i(TAG, "RFCOMM connected to ${device.address}")
